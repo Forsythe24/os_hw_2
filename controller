@@ -1,0 +1,76 @@
+#! /usr/bin/python3
+
+import os
+import signal
+import random
+import sys
+
+lines_processed = 0
+
+def handle_sigusr1(signum, frame):
+    print(f"Processed {lines_processed} lines", file=sys.stderr)
+
+signal.signal(signal.SIGUSR1, handle_sigusr1)
+
+pipes = {
+    "a": os.pipe(),
+    "b": os.pipe(),
+    "c": os.pipe(),
+}
+
+if os.fork() == 0:
+    os.dup2(pipes["a"][1], sys.stdout.fileno())
+    for key in pipes:
+        os.close(pipes[key][0])
+        os.close(pipes[key][1])
+
+    generator_path = "./generator"
+    random_value = random.randint(120, 180)
+    os.execve(generator_path, [generator_path, str(random_value)], os.environ)
+    sys.exit(1)
+
+if os.fork() == 0:
+    os.dup2(pipes["b"][0], sys.stdin.fileno())
+    os.dup2(pipes["c"][1], sys.stdout.fileno())
+    for key in pipes:
+        os.close(pipes[key][0])
+        os.close(pipes[key][1])
+
+    bc_path = "/usr/bin/bc"
+    os.execvp(bc_path, [bc_path])
+    sys.exit(1)
+
+os.close(pipes["a"][1])
+os.close(pipes["b"][0])
+os.close(pipes["c"][1])
+
+try:
+    with os.fdopen(pipes["a"][0], 'r') as reader_a, \
+         os.fdopen(pipes["b"][1], 'w') as writer_b, \
+         os.fdopen(pipes["c"][0], 'r') as reader_c:
+
+        for line in reader_a:
+            lines_processed += 1
+
+            writer_b.write(line)
+            writer_b.flush()
+
+            result = reader_c.readline()
+            if not result:
+                print("Error: no result from bc", file=sys.stderr)
+                break
+
+            print(f"{line.strip()} = {result.strip()}")
+
+except BrokenPipeError:
+    print("Error: pipe broken", file=sys.stderr)
+    sys.exit(1)
+
+except Exception as e:
+    print(f"Error: {e}", file=sys.stderr)
+    sys.exit(1)
+
+for _ in range(2):
+    os.wait()
+
+sys.exit(0)

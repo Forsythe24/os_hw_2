@@ -1,0 +1,39 @@
+#! /usr/bin/python3
+
+import os
+import sys
+import random
+import time
+
+def validate_args(args):
+    if len(args) != 2:
+        print("Usage: script_name <N>", file=sys.stderr)
+        os._exit(1)
+
+    try:
+        N = int(args[1])
+        if not (120 <= N <= 180):
+            raise ValueError("N must be between 120 and 180")
+        return N
+    except ValueError:
+        print("N must be an integer between 120 and 180", file=sys.stderr)
+        os._exit(1)
+
+def generate_expression():
+    x, y = random.randint(1, 9), random.randint(1, 9)
+    operation = random.choice(['+', '-', '*', '/'])
+    return f"{x} {operation} {y}"
+
+def main():
+    N = validate_args(sys.argv)
+
+    try:
+        for _ in range(N):
+            print(generate_expression(), flush=True)
+            time.sleep(1)
+    except BrokenPipeError:
+        print("Error: Pipe broken", file=sys.stderr)
+        os._exit(1)
+
+if __name__ == "__main__":
+    main()
